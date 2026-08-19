@@ -70,7 +70,7 @@ export const Register: React.FC<RegisterProps> = ({ role, onBack, onSuccess }) =
     else navigate('/auth');
   };
 
-  const handlePatientSubmit = (e: React.FormEvent) => {
+  const handlePatientSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -84,16 +84,14 @@ export const Register: React.FC<RegisterProps> = ({ role, onBack, onSuccess }) =
     }
 
     setIsLoading(true);
-    setTimeout(() => {
-      const isOk = registerPatient(patientName, patientEmail, patientMobile);
-      setIsLoading(false);
-      if (isOk) {
-        if (onSuccess) onSuccess();
-        else navigate('/user/dashboard');
-      } else {
-        setError('Email address is already registered.');
-      }
-    }, 800);
+    const isOk = await registerPatient(patientName, patientEmail, patientMobile, patientPassword);
+    setIsLoading(false);
+    if (isOk) {
+      if (onSuccess) onSuccess();
+      else navigate('/user/dashboard');
+    } else {
+      setError('Email address is already registered.');
+    }
   };
 
   const handleHospNextStep = (e: React.FormEvent) => {

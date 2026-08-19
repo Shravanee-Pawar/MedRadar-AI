@@ -1,4 +1,5 @@
 import { db } from './db';
+import { apiFetch } from './apiClient';
 import { type EmergencyRequest, type Recommendation, type Ambulance } from '../types';
 
 export interface EmergencyResourceMapping {
@@ -118,6 +119,8 @@ export const emergencyService = {
   },
 
   getEmergencyRequests: async (): Promise<EmergencyRequest[]> => {
+    const remote = await apiFetch<EmergencyRequest[]>('/emergency/requests');
+    if (remote && Array.isArray(remote) && remote.length > 0) return remote;
     return db.getEmergencyRequests();
   },
 
@@ -136,9 +139,28 @@ export const emergencyService = {
     lat?: number,
     lng?: number
   ): Promise<EmergencyRequest> => {
+    const remoteRes = await apiFetch<{ emergencyRequest: EmergencyRequest; recommendations: Recommendation[] }>('/emergency/sos', {
+      method: 'POST',
+      body: JSON.stringify({
+        emergencyType,
+        location,
+        locationAddress: locationAddress || location,
+        lat: lat || 16.9902,
+        lng: lng || 73.3120,
+        locationType,
+        requiredResources,
+      }),
+    });
+
+    if (remoteRes && remoteRes.emergencyRequest) {
+      if (remoteRes.recommendations && remoteRes.recommendations.length > 0) {
+        db.saveRecommendations(remoteRes.recommendations);
+      }
+      return remoteRes.emergencyRequest;
+    }
+
     const requests = db.getEmergencyRequests();
     const reqId = `req-${Date.now()}`;
-    
     const mapping = emergencyResourceMappings[emergencyType] || emergencyResourceMappings['Other Emergency'];
     const potentialList = mapping.potential.map(p => p.id);
 
@@ -162,21 +184,6 @@ export const emergencyService = {
 
     requests.unshift(newReq);
     db.saveEmergencyRequests(requests);
-
-    // Push critical alert
-    const notifications = db.getNotifications();
-    notifications.unshift({
-      id: `not-${Date.now()}`,
-      recipientId: 'all_admins',
-      type: 'Emergency',
-      title: '🚨 CRITICAL SOS ALERT',
-      description: `${patientName} triggered a ${emergencyType} emergency at ${location}.`,
-      timestamp: 'Just now',
-      isRead: false,
-      isCritical: true
-    });
-    db.saveNotifications(notifications);
-
     return newReq;
   },
 
@@ -184,14 +191,19 @@ export const emergencyService = {
     requestId: string,
     hospitalId: string,
     hospitalName: string,
-    patientName: string,
+    _patientName: string,
     patientPhone: string,
-    emergencyType: string,
-    pickupLocation: string,
+    _emergencyType: string,
+    _pickupLocation: string,
     etaMin: number,
     ambulanceId?: string,
     ambulanceNumber?: string
   ): Promise<void> => {
+    await apiFetch(`/emergency/requests/${requestId}/pre-alert`, {
+      method: 'POST',
+      body: JSON.stringify({ hospitalId, patientPhone, etaMin }),
+    });
+
     const reqs = db.getEmergencyRequests();
     const updatedReqs = reqs.map(r => {
       if (r.id === requestId) {
@@ -212,38 +224,13 @@ export const emergencyService = {
       return r;
     });
     db.saveEmergencyRequests(updatedReqs);
-
-    // Notify Hospital Admin
-    const notifs = db.getNotifications();
-    notifs.unshift({
-      id: `not-prealert-${Date.now()}`,
-      recipientId: 'all_admins',
-      type: 'Emergency',
-      title: '🚨 INCOMING EMERGENCY — Patient Pre-Alert',
-      description: `${patientName} (${emergencyType}) heading to ${hospitalName}. ETA: ${etaMin} min. Pickup: ${pickupLocation}. Ambulance: ${ambulanceNumber || 'ALS Unit'}.`,
-      timestamp: 'Just now',
-      isRead: false,
-      isCritical: true
-    });
-    db.saveNotifications(notifs);
-
-    // Audit log
-    const audits = db.getAuditLogs();
-    audits.unshift({
-      id: `aud-${Date.now()}`,
-      actorId: 'patient',
-      actorName: patientName,
-      actorRole: 'patient',
-      action: 'Send Emergency Arrival Pre-Alert',
-      entityType: 'EmergencyRequest',
-      entityId: requestId,
-      details: `Transmitted Emergency Arrival Request for ${patientName} (${emergencyType}) to ${hospitalName}. ETA: ${etaMin}m`,
-      timestamp: new Date().toISOString()
-    });
-    db.saveAuditLogs(audits);
   },
 
-  acknowledgeHospitalPreAlert: async (requestId: string, adminName: string): Promise<void> => {
+  acknowledgeHospitalPreAlert: async (requestId: string, _adminName: string): Promise<void> => {
+    await apiFetch(`/emergency/requests/${requestId}/acknowledge`, {
+      method: 'PATCH',
+    });
+
     const reqs = db.getEmergencyRequests();
     const updatedReqs = reqs.map(r => {
       if (r.id === requestId) {
@@ -257,37 +244,6 @@ export const emergencyService = {
       return r;
     });
     db.saveEmergencyRequests(updatedReqs);
-
-    const targetReq = reqs.find(r => r.id === requestId);
-
-    // Push notification
-    const notifs = db.getNotifications();
-    notifs.unshift({
-      id: `not-ack-${Date.now()}`,
-      recipientId: 'all_admins',
-      type: 'Emergency',
-      title: '✓ Emergency Alert Acknowledged',
-      description: `${adminName} acknowledged incoming emergency pre-alert for ${targetReq?.patientName || 'Patient'} at ${targetReq?.selectedHospitalName || 'Hospital'}.`,
-      timestamp: 'Just now',
-      isRead: false,
-      isCritical: false
-    });
-    db.saveNotifications(notifs);
-
-    // Audit log
-    const audits = db.getAuditLogs();
-    audits.unshift({
-      id: `aud-${Date.now()}`,
-      actorId: 'hosp-admin',
-      actorName: adminName,
-      actorRole: 'hospital_admin',
-      action: 'Acknowledge Pre-Alert',
-      entityType: 'EmergencyRequest',
-      entityId: requestId,
-      details: `${adminName} confirmed hospital pre-alert for ${targetReq?.patientName}`,
-      timestamp: new Date().toISOString()
-    });
-    db.saveAuditLogs(audits);
   },
 
   updateAmbulanceStatus: async (
@@ -295,6 +251,11 @@ export const emergencyService = {
     status: 'Available' | 'On Trip' | 'At Hospital' | 'Maintenance' | 'Offline',
     equipment: string[]
   ): Promise<void> => {
+    await apiFetch(`/ambulances/${ambulanceId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, equipment }),
+    });
+
     const list = db.getAmbulances();
     const updated = list.map(a => {
       if (a.id === ambulanceId) {
@@ -303,26 +264,15 @@ export const emergencyService = {
       return a;
     });
     db.saveAmbulances(updated);
-
-    const targetAmb = list.find(a => a.id === ambulanceId);
-
-    // Audit log
-    const auditLogs = db.getAuditLogs();
-    auditLogs.unshift({
-      id: `aud-${Date.now()}`,
-      actorId: 'hosp-admin',
-      actorName: 'Hospital Admin',
-      actorRole: 'hospital_admin',
-      action: 'Update Ambulance Status',
-      entityType: 'Ambulance',
-      entityId: ambulanceId,
-      details: `Set ambulance unit ${targetAmb?.ambulanceNumber} status to ${status}`,
-      timestamp: new Date().toISOString()
-    });
-    db.saveAuditLogs(auditLogs);
   },
 
   addAmbulance: async (ambData: Omit<Ambulance, 'id' | 'updatedAt'>): Promise<Ambulance> => {
+    const remote = await apiFetch<Ambulance>('/ambulances', {
+      method: 'POST',
+      body: JSON.stringify(ambData),
+    });
+    if (remote) return remote;
+
     const list = db.getAmbulances();
     const newAmb: Ambulance = {
       ...ambData,

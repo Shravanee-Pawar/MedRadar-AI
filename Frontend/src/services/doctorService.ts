@@ -1,79 +1,28 @@
 import { db } from './db';
+import { apiFetch } from './apiClient';
 import { type Doctor } from '../types';
-
-export const validateDoctorData = (doctors: Doctor[]): { valid: boolean; errors: string[] } => {
-  const errors: string[] = [];
-  const ids = new Set<string>();
-  const names = new Set<string>();
-
-  doctors.forEach((d, idx) => {
-    // Unique ID check
-    const id = d.doctorId || d.id;
-    if (!id) {
-      errors.push(`Doctor at index ${idx} is missing an ID.`);
-    } else if (ids.has(id)) {
-      errors.push(`Duplicate Doctor ID found: ${id}`);
-    } else {
-      ids.add(id);
-    }
-
-    // Unique Name check
-    if (!d.name || d.name.trim() === '') {
-      errors.push(`Doctor at index ${idx} has an empty name.`);
-    } else if (names.has(d.name)) {
-      errors.push(`Duplicate Doctor name found: "${d.name}"`);
-    } else {
-      names.add(d.name);
-    }
-
-    // Hospital ID check
-    if (!d.hospitalId) {
-      errors.push(`Doctor "${d.name}" is missing hospitalId.`);
-    }
-
-    // Department ID check
-    if (!d.departmentId) {
-      errors.push(`Doctor "${d.name}" is missing departmentId.`);
-    }
-
-    // Specialization check
-    const spec = d.specialization || d.specialty;
-    if (!spec) {
-      errors.push(`Doctor "${d.name}" is missing specialization.`);
-    }
-
-    // Availability status check
-    const status = d.availabilityStatus || d.status;
-    if (!['Available', 'On Call', 'Unavailable', 'Off Duty'].includes(status)) {
-      errors.push(`Doctor "${d.name}" has invalid status: ${status}`);
-    }
-
-    // Emergency duty check
-    if (typeof d.emergencyDuty !== 'boolean') {
-      errors.push(`Doctor "${d.name}" has invalid emergencyDuty value.`);
-    }
-  });
-
-  if (errors.length > 0) {
-    console.warn('[MedRadar AI — Doctor Data Validation Warnings]', errors);
-  }
-
-  return { valid: errors.length === 0, errors };
-};
 
 export const doctorService = {
   getDoctors: async (): Promise<Doctor[]> => {
-    const list = db.getDoctors();
-    validateDoctorData(list);
-    return list;
+    const remote = await apiFetch<Doctor[]>('/doctors');
+    if (remote && Array.isArray(remote) && remote.length > 0) return remote;
+    return db.getDoctors();
   },
 
   getDoctorsByHospital: async (hospitalId: string): Promise<Doctor[]> => {
+    const remote = await apiFetch<Doctor[]>(`/doctors?hospitalId=${hospitalId}`);
+    if (remote && Array.isArray(remote) && remote.length > 0) return remote;
     const list = db.getDoctors();
     return list.filter(d => d.hospitalId === hospitalId);
   },
 
   addDoctor: async (docData: Partial<Doctor> & Omit<Doctor, 'id' | 'image'>): Promise<Doctor> => {
+    const remote = await apiFetch<Doctor>('/doctors', {
+      method: 'POST',
+      body: JSON.stringify(docData),
+    });
+    if (remote) return remote;
+
     const list = db.getDoctors();
     const ts = Date.now();
     const avatar = docData.profileImage || docData.image || 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=300&h=300&fit=crop&crop=face';
@@ -107,22 +56,6 @@ export const doctorService = {
 
     list.unshift(newDoc);
     db.saveDoctors(list);
-
-    // Audit log
-    const auditLogs = db.getAuditLogs();
-    auditLogs.unshift({
-      id: `aud-${Date.now()}`,
-      actorId: 'hosp-admin',
-      actorName: 'Hospital Admin',
-      actorRole: 'hospital_admin',
-      action: 'Add Doctor',
-      entityType: 'Doctor',
-      entityId: newDoc.id,
-      details: `Added new doctor ${newDoc.name} to Roster`,
-      timestamp: new Date().toISOString()
-    });
-    db.saveAuditLogs(auditLogs);
-
     return newDoc;
   },
 
@@ -131,6 +64,11 @@ export const doctorService = {
     status: 'Available' | 'On Call' | 'Off Duty' | 'Unavailable',
     emergencyDuty: boolean
   ): Promise<void> => {
+    await apiFetch(`/doctors/${doctorId}/roster`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, emergencyDuty }),
+    });
+
     const list = db.getDoctors();
     const updated = list.map(d => {
       if (d.id === doctorId || d.doctorId === doctorId) {
@@ -145,22 +83,5 @@ export const doctorService = {
       return d;
     });
     db.saveDoctors(updated);
-
-    const targetDoc = list.find(d => d.id === doctorId || d.doctorId === doctorId);
-
-    // Audit log
-    const auditLogs = db.getAuditLogs();
-    auditLogs.unshift({
-      id: `aud-${Date.now()}`,
-      actorId: 'hosp-admin',
-      actorName: 'Hospital Admin',
-      actorRole: 'hospital_admin',
-      action: 'Update Doctor Status',
-      entityType: 'Doctor',
-      entityId: doctorId,
-      details: `Modified ${targetDoc?.name} status to ${status} (Emergency Duty: ${emergencyDuty ? 'ON' : 'OFF'})`,
-      timestamp: new Date().toISOString()
-    });
-    db.saveAuditLogs(auditLogs);
   }
 };

@@ -1,12 +1,17 @@
 import { db } from './db';
+import { apiFetch } from './apiClient';
 import { type BloodInventory, type BloodRequest } from '../types';
 
 export const bloodService = {
   getBloodInventory: async (): Promise<BloodInventory[]> => {
+    const remote = await apiFetch<BloodInventory[]>('/blood/inventory');
+    if (remote && Array.isArray(remote) && remote.length > 0) return remote;
     return db.getBloodInventory();
   },
 
   getInventoryByHospital: async (hospitalId: string): Promise<BloodInventory[]> => {
+    const remote = await apiFetch<BloodInventory[]>(`/blood/inventory?hospitalId=${hospitalId}`);
+    if (remote && Array.isArray(remote) && remote.length > 0) return remote;
     const list = db.getBloodInventory();
     return list.filter(b => b.hospitalId === hospitalId);
   },
@@ -18,6 +23,18 @@ export const bloodService = {
     patientName: string,
     patientId: string
   ): Promise<BloodRequest> => {
+    const remote = await apiFetch<BloodRequest>('/blood/requests', {
+      method: 'POST',
+      body: JSON.stringify({
+        patientName,
+        patientPhone: '9876543210',
+        bloodGroup,
+        unitsRequired,
+        hospitalId,
+      }),
+    });
+    if (remote) return remote;
+
     const list = db.getBloodRequests();
     const hospitals = db.getHospitals();
     const targetHosp = hospitals.find(h => h.id === hospitalId);
@@ -36,38 +53,6 @@ export const bloodService = {
 
     list.unshift(newBReq);
     db.saveBloodRequests(list);
-
-    // Update dynamic inventory count
-    const inventory = db.getBloodInventory();
-    const updatedInventory = inventory.map(item => {
-      if (item.hospitalId === hospitalId && item.bloodGroup === bloodGroup) {
-        const nextUnits = Math.max(0, item.unitsAvailable - unitsRequired);
-        const status = (nextUnits === 0 ? 'Critical' : nextUnits <= 2 ? 'Limited' : 'Available') as any;
-        return {
-          ...item,
-          unitsAvailable: nextUnits,
-          status,
-          updatedAt: new Date().toISOString()
-        };
-      }
-      return item;
-    });
-    db.saveBloodInventory(updatedInventory);
-
-    // Notification alert
-    const notifications = db.getNotifications();
-    notifications.unshift({
-      id: `not-${Date.now()}`,
-      recipientId: 'all_admins',
-      type: 'Blood',
-      title: 'Blood Units Reserved',
-      description: `${patientName} filed request for ${unitsRequired} units of ${bloodGroup} at ${targetHosp?.name}. Verification Code: MB-${Math.floor(Math.random()*9000 + 1000)}.`,
-      timestamp: 'Just now',
-      isRead: false,
-      isCritical: false
-    });
-    db.saveNotifications(notifications);
-
     return newBReq;
   },
 
@@ -76,6 +61,11 @@ export const bloodService = {
     bloodGroup: 'O+' | 'O-' | 'A+' | 'A-' | 'B+' | 'B-' | 'AB+' | 'AB-',
     unitsAvailable: number
   ): Promise<void> => {
+    await apiFetch(`/blood/inventory/${hospitalId}/${bloodGroup}`, {
+      method: 'PUT',
+      body: JSON.stringify({ unitsAvailable }),
+    });
+
     const inventory = db.getBloodInventory();
     const updated = inventory.map(item => {
       if (item.hospitalId === hospitalId && item.bloodGroup === bloodGroup) {

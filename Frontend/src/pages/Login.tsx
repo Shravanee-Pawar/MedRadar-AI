@@ -37,7 +37,7 @@ export const Login: React.FC<LoginProps> = ({ role, onBack, onSuccess }) => {
       setEmail('shubham@medradar.ai');
       setPassword('demo123');
     } else if (userType === 'verified_hosp') {
-      setEmail('admin@parkarhospital.com');
+      setEmail('vivek@parkarhospital.org');
       setPassword('demo123');
     } else if (userType === 'pending_hosp') {
       setEmail('admin@shreeram.com');
@@ -48,7 +48,7 @@ export const Login: React.FC<LoginProps> = ({ role, onBack, onSuccess }) => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setHospitalStatusState(null);
@@ -64,42 +64,38 @@ export const Login: React.FC<LoginProps> = ({ role, onBack, onSuccess }) => {
 
     setIsLoading(true);
 
-    setTimeout(() => {
-      const isOk = login(email, role);
-      setIsLoading(false);
+    const isOk = await login(email, role, password);
+    setIsLoading(false);
 
-      if (isOk) {
-        // If hospital admin, check hospital verification status
-        if (role === 'hospital_admin') {
-          // Find logged in user's hospital
-          const loggedUser = currentUser || { email };
-          const userHosp = hospitals.find(h => h.id === (loggedUser as any).hospitalId || h.phone?.includes(email));
+    if (isOk) {
+      // If hospital admin, check hospital verification status
+      if (role === 'hospital_admin') {
+        const loggedUser = currentUser || { email };
+        const userHosp = hospitals.find(h => h.id === (loggedUser as any).hospitalId || h.phone?.includes(email));
 
-          if (userHosp && !userHosp.verified) {
-            setHospitalStatusState('pending');
-            return;
-          }
-        }
-
-        setSuccess(true);
-        setTimeout(() => {
-          if (onSuccess) {
-            onSuccess();
-          } else {
-            if (role === 'patient') navigate('/user/dashboard');
-            else if (role === 'hospital_admin') navigate('/hospital/dashboard');
-            else if (role === 'super_admin') navigate('/admin/dashboard');
-          }
-        }, 600);
-      } else {
-        // Handle pending demo email explicitly
-        if (role === 'hospital_admin' && email.toLowerCase() === 'admin@shreeram.com') {
+        if (userHosp && !userHosp.verified) {
           setHospitalStatusState('pending');
           return;
         }
-        setError('Invalid email or password.');
       }
-    }, 800);
+
+      setSuccess(true);
+      setTimeout(() => {
+        if (onSuccess) {
+          onSuccess();
+        } else {
+          if (role === 'patient') navigate('/user/dashboard');
+          else if (role === 'hospital_admin') navigate('/hospital/dashboard');
+          else if (role === 'super_admin') navigate('/admin/dashboard');
+        }
+      }, 600);
+    } else {
+      if (role === 'hospital_admin' && email.toLowerCase() === 'admin@shreeram.com') {
+        setHospitalStatusState('pending');
+        return;
+      }
+      setError('Invalid email or password.');
+    }
   };
 
   const getHeadingText = () => {
@@ -164,7 +160,7 @@ export const Login: React.FC<LoginProps> = ({ role, onBack, onSuccess }) => {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder={role === 'hospital_admin' ? 'admin@yourhospital.org' : 'user@medradar.ai'}
+                    placeholder={role === 'hospital_admin' ? 'vivek@parkarhospital.org' : 'shubham@medradar.ai'}
                     className="w-full pl-10 pr-4 py-2.5 text-xs rounded-xl glass-input text-primary-text"
                   />
                 </div>
@@ -234,7 +230,7 @@ export const Login: React.FC<LoginProps> = ({ role, onBack, onSuccess }) => {
                 {role === 'super_admin' ? 'Secure Login' : 'Login'}
               </Button>
 
-              {/* Bottom Register Links (USER & HOSPITAL ONLY — NO REGISTER FOR ADMIN) */}
+              {/* Bottom Register Links */}
               {role === 'patient' && (
                 <p className="text-[11px] text-center text-secondary-text pt-2">
                   Don't have a user account?{' '}

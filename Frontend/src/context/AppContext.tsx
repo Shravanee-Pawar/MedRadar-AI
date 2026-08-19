@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { db } from '../services/db';
+import { apiFetch } from '../services/apiClient';
 import { hospitalService } from '../services/hospitalService';
 import { resourceService } from '../services/resourceService';
 import { doctorService } from '../services/doctorService';
@@ -34,20 +35,20 @@ interface AppContextType {
   updateLogs: ResourceUpdate[];
   auditLogs: AuditLog[];
   notifications: Notification[];
-  login: (email: string, role: 'patient' | 'hospital_admin' | 'super_admin') => boolean;
+  login: (email: string, role: 'patient' | 'hospital_admin' | 'super_admin', password?: string) => Promise<boolean>;
   logout: () => void;
-  registerPatient: (name: string, email: string, mobile: string) => boolean;
-  registerHospital: (hospData: Omit<Hospital, 'id' | 'verified' | 'distanceFromUserKm' | 'readinessScore' | 'updatedAt'>) => void;
-  triggerSOS: (emergencyType: any, location: string, requiredResources: any[]) => void;
-  updateResource: (hospitalId: string, resourceType: string, newValue: number, reason?: string) => void;
-  updateDoctorStatus: (doctorId: string, status: 'Available' | 'On Call' | 'Off Duty', emergencyDuty: boolean) => void;
-  updateAmbulanceStatus: (ambulanceId: string, status: any, equipment: string[]) => void;
-  verifyHospital: (hospitalId: string, action: 'approve' | 'reject') => void;
-  sendStaleReminder: (hospitalId: string, resourceName: string) => void;
-  requestBlood: (bloodGroup: any, units: number, hospitalId: string) => void;
-  markNotificationRead: (notifId: string) => void;
-  clearAllNotifications: () => void;
-  refreshState: () => void;
+  registerPatient: (name: string, email: string, mobile: string, password?: string) => Promise<boolean>;
+  registerHospital: (hospData: Omit<Hospital, 'id' | 'verified' | 'distanceFromUserKm' | 'readinessScore' | 'updatedAt'>) => Promise<void>;
+  triggerSOS: (emergencyType: any, location: string, requiredResources: any[]) => Promise<void>;
+  updateResource: (hospitalId: string, resourceType: string, newValue: number, reason?: string) => Promise<void>;
+  updateDoctorStatus: (doctorId: string, status: 'Available' | 'On Call' | 'Off Duty', emergencyDuty: boolean) => Promise<void>;
+  updateAmbulanceStatus: (ambulanceId: string, status: any, equipment: string[]) => Promise<void>;
+  verifyHospital: (hospitalId: string, action: 'approve' | 'reject') => Promise<void>;
+  sendStaleReminder: (hospitalId: string, resourceName: string) => Promise<void>;
+  requestBlood: (bloodGroup: any, units: number, hospitalId: string) => Promise<void>;
+  markNotificationRead: (notifId: string) => Promise<void>;
+  clearAllNotifications: () => Promise<void>;
+  refreshState: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -55,7 +56,6 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   
-  // Dynamic State collections synced with database services
   const [hospitals, setHospitals] = useState<Hospital[]>([]);
   const [resources, setResources] = useState<HospitalResource[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
@@ -68,76 +68,99 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
-  const refreshState = () => {
-    setHospitals(db.getHospitals());
+  const refreshState = async () => {
+    try {
+      const [hospData, docData, bldData, notifData] = await Promise.all([
+        hospitalService.getHospitals(),
+        doctorService.getDoctors(),
+        bloodService.getBloodInventory(),
+        notificationService.getNotifications()
+      ]);
+      setHospitals(hospData);
+      setDoctors(docData);
+      setBloodInventory(bldData);
+      setNotifications(notifData);
+    } catch (_) {
+      setHospitals(db.getHospitals());
+      setDoctors(db.getDoctors());
+      setBloodInventory(db.getBloodInventory());
+      setNotifications(db.getNotifications());
+    }
+
     setResources(db.getResources());
-    setDoctors(db.getDoctors());
     setAmbulances(db.getAmbulances());
-    setBloodInventory(db.getBloodInventory());
     setEmergencyRequests(db.getEmergencyRequests());
     setAiRecommendations(db.getRecommendations());
     setBloodRequests(db.getBloodRequests());
     setUpdateLogs(db.getResourceUpdates());
     setAuditLogs(db.getAuditLogs());
-    setNotifications(db.getNotifications());
   };
 
-  // Sync once at mount
   useEffect(() => {
+    // Attempt auto-login if token is saved in localStorage
+    const savedToken = localStorage.getItem('token');
+    if (savedToken) {
+      apiFetch<{ user: User }>('/auth/me').then(res => {
+        if (res && res.user) {
+          setCurrentUser(res.user);
+        }
+      });
+    }
     refreshState();
+
+    // 🔄 Real-time background sync polling every 3 seconds
+    const syncInterval = setInterval(() => {
+      refreshState();
+    }, 3000);
+
+    return () => clearInterval(syncInterval);
   }, []);
 
-  const login = (email: string, role: 'patient' | 'hospital_admin' | 'super_admin'): boolean => {
+  const login = async (email: string, role: 'patient' | 'hospital_admin' | 'super_admin', password: string = 'password123'): Promise<boolean> => {
+    const res = await apiFetch<{ token: string; user: User }>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password, role }),
+    });
+
+    if (res && res.token && res.user) {
+      localStorage.setItem('token', res.token);
+      setCurrentUser(res.user);
+      await refreshState();
+      return true;
+    }
+
+    // Local fallback if server offline
     const list = db.getUsers();
     const user = list.find(u => u.email.toLowerCase() === email.toLowerCase() && u.role === role);
     if (user) {
       setCurrentUser(user);
-      
-      // Log login event
-      const audits = db.getAuditLogs();
-      audits.unshift({
-        id: `aud-${Date.now()}`,
-        actorId: user.id,
-        actorName: user.name,
-        actorRole: user.role,
-        action: 'Login',
-        entityType: 'User',
-        entityId: user.id,
-        details: `${user.name} logged into the system portal successfully.`,
-        timestamp: new Date().toISOString()
-      });
-      db.saveAuditLogs(audits);
-      refreshState();
+      await refreshState();
       return true;
     }
     return false;
   };
 
   const logout = () => {
-    if (currentUser) {
-      const audits = db.getAuditLogs();
-      audits.unshift({
-        id: `aud-${Date.now()}`,
-        actorId: currentUser.id,
-        actorName: currentUser.name,
-        actorRole: currentUser.role,
-        action: 'Logout',
-        entityType: 'User',
-        entityId: currentUser.id,
-        details: `${currentUser.name} signed out of the session.`,
-        timestamp: new Date().toISOString()
-      });
-      db.saveAuditLogs(audits);
-    }
+    apiFetch('/auth/logout', { method: 'POST' });
+    localStorage.removeItem('token');
     setCurrentUser(null);
     refreshState();
   };
 
-  const registerPatient = (name: string, email: string, mobile: string): boolean => {
-    const list = db.getUsers();
-    const exists = list.some(u => u.email.toLowerCase() === email.toLowerCase());
-    if (exists) return false;
+  const registerPatient = async (name: string, email: string, mobile: string, password: string = 'password123'): Promise<boolean> => {
+    const res = await apiFetch<{ token: string; user: User }>('/auth/register/patient', {
+      method: 'POST',
+      body: JSON.stringify({ name, email, mobile, password }),
+    });
 
+    if (res && res.token && res.user) {
+      localStorage.setItem('token', res.token);
+      setCurrentUser(res.user);
+      await refreshState();
+      return true;
+    }
+
+    const list = db.getUsers();
     const newUser: User = {
       id: `usr-${Date.now()}`,
       name,
@@ -149,13 +172,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     list.push(newUser);
     db.saveUsers(list);
     setCurrentUser(newUser);
-    refreshState();
+    await refreshState();
     return true;
   };
 
   const registerHospital = async (hospData: Omit<Hospital, 'id' | 'verified' | 'distanceFromUserKm' | 'readinessScore' | 'updatedAt'>) => {
     await hospitalService.registerHospital(hospData);
-    refreshState();
+    await refreshState();
   };
 
   const triggerSOS = async (emergencyType: any, location: string, requiredResources: any[]) => {
@@ -166,7 +189,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       currentUser?.id || 'guest',
       currentUser?.name || 'Emergency Guest'
     );
-    refreshState();
+    await refreshState();
   };
 
   const updateResource = async (hospitalId: string, resourceType: string, newValue: number, reason?: string) => {
@@ -177,27 +200,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       reason || '',
       currentUser?.name || 'Hospital Admin'
     );
-    refreshState();
+    await refreshState();
   };
 
   const updateDoctorStatus = async (doctorId: string, status: 'Available' | 'On Call' | 'Off Duty', emergencyDuty: boolean) => {
     await doctorService.updateDoctorRoster(doctorId, status, emergencyDuty);
-    refreshState();
+    await refreshState();
   };
 
   const updateAmbulanceStatus = async (ambulanceId: string, status: any, equipment: string[]) => {
     await emergencyService.updateAmbulanceStatus(ambulanceId, status, equipment);
-    refreshState();
+    await refreshState();
   };
 
   const verifyHospital = async (hospitalId: string, action: 'approve' | 'reject') => {
     await hospitalService.verifyHospital(hospitalId, action);
-    refreshState();
+    await refreshState();
   };
 
   const sendStaleReminder = async (hospitalId: string, resourceName: string) => {
     await resourceService.sendStaleReminder(hospitalId, resourceName);
-    refreshState();
+    await refreshState();
   };
 
   const requestBlood = async (bloodGroup: any, units: number, hospitalId: string) => {
@@ -208,17 +231,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       currentUser?.name || 'Patient Guest',
       currentUser?.id || 'guest'
     );
-    refreshState();
+    await refreshState();
   };
 
   const markNotificationRead = async (notifId: string) => {
     await notificationService.markRead(notifId);
-    refreshState();
+    await refreshState();
   };
 
   const clearAllNotifications = async () => {
     await notificationService.clearAll();
-    refreshState();
+    await refreshState();
   };
 
   return (
