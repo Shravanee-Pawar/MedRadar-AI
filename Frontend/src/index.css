@@ -1,0 +1,138 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-primary-bg: #0B1220;
+  --color-primary-bg-alt: #0F172A;
+  --color-primary-bg-deep: #070B14;
+  --color-secondary-surface: #162238;
+  --color-secondary-surface-alt: #1A2940;
+  --color-medical-teal: #55E0C1;
+  --color-medical-teal-dark: #1BAA96;
+  --color-emergency: #FF6B6B;
+  --color-emergency-dark: #E5484D;
+  --color-success: #4ADE80;
+  --color-warning: #FBBF24;
+  --color-info: #60A5FA;
+  --color-primary-text: #F8FAFC;
+  --color-secondary-text: #A7B1C2;
+  --color-muted-text: #64748B;
+  
+  --font-sans: 'Inter', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-heading: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+}
+
+@layer utilities {
+  .glass-card {
+    background: rgba(22, 34, 56, 0.45);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+  }
+
+  .glass-panel {
+    background: rgba(11, 18, 32, 0.7);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .glass-input {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #F8FAFC;
+    transition: all 0.2s ease-in-out;
+  }
+
+  .glass-input:focus {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(85, 224, 193, 0.5);
+    box-shadow: 0 0 12px rgba(85, 224, 193, 0.15);
+    outline: none;
+  }
+
+  .glow-teal {
+    box-shadow: 0 0 15px rgba(85, 224, 193, 0.25);
+  }
+
+  .glow-coral {
+    box-shadow: 0 0 15px rgba(255, 107, 107, 0.25);
+  }
+
+  .glow-coral-large {
+    box-shadow: 0 0 25px rgba(255, 107, 107, 0.4);
+  }
+
+  .pulse-slow {
+    animation: pulse 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  .pulse-emergency {
+    animation: emergencyPulse 1.8s infinite;
+  }
+
+  .ecg-line {
+    stroke-dasharray: 1000;
+    stroke-dashoffset: 1000;
+    animation: drawECG 4s linear infinite;
+  }
+}
+
+@keyframes emergencyPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.5);
+  }
+  70% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 10px rgba(255, 107, 107, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 107, 107, 0);
+  }
+}
+
+@keyframes drawECG {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(11, 18, 32, 0.5);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(85, 224, 193, 0.3);
+}
+
+body {
+  background-color: #0B1220;
+  color: #F8FAFC;
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+}
+
+/* Global select and option fallback styling for contrast */
+select, option {
+  background-color: #0F172A !important;
+  color: #F8FAFC !important;
+}
+select:focus {
+  border-color: #55E0C1 !important;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(85, 224, 193, 0.2) !important;
+}
