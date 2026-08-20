@@ -1,9 +1,4 @@
 import app from './app.js';
-
-
-
-const startServer = async () => {
-  await connectDB();
 import { connectDB } from "./db.js";
 const PORT = process.env.PORT || 5000;
 connectDB().then(() => {
