@@ -371,35 +371,102 @@ export const UserEmergencyPage: React.FC = () => {
     );
     setActiveReqId(newReq.id);
 
-    // Simulate explainable AI matching calculations
+    // Fetch recommendations from backend database storage
     setTimeout(() => {
-      const mapped = hospitals
-        .filter(h => h.verified && h.emergencyStatus !== 'Critical')
-        .map((h, idx) => {
-          let matchScore = 96 - idx * 5;
-          const matchedDoctor = doctors.find(d => d.hospitalId === h.id && (d.availabilityStatus === 'Available' || d.status === 'Available')) || doctors[0];
-          const hasICU = resources.some(r => r.hospitalId === h.id && r.resourceType === 'icu_beds' && r.available > 0);
-          const hasVentilator = resources.some(r => r.hospitalId === h.id && r.resourceType === 'ventilators' && r.available > 0);
+      const backendRecs = db.getRecommendations();
 
-          if (!hasICU) matchScore -= 10;
-          matchScore = Math.max(70, Math.min(99, matchScore));
+      const normalizeHospitalId = (id: string): string => {
+        const match = id.match(/^hosp-(\d+)$/);
+        if (match) {
+          return `hosp-${parseInt(match[1], 10)}`;
+        }
+        return id;
+      };
 
-          const travelTimeMin = Math.max(4, Math.round(h.distanceFromUserKm * 2.8));
+      const getRequiredDoctorSpecialties = (type: string): string[] => {
+        switch (type) {
+          case 'Cardiac Emergency':
+            return ['cardiologist', 'cardiology'];
+          case 'Stroke / Neurological Trauma':
+            return ['neurologist', 'neurosurgeon', 'neurosurgery', 'neurology'];
+          case 'Road Accident / Poly-Trauma':
+            return ['trauma surgeon', 'orthopedic surgeon', 'emergency medicine', 'general surgery & trauma', 'trauma'];
+          case 'Severe Burns':
+            return ['plastic/burns surgeon', 'burns/plastic specialist', 'plastic surgeon', 'burn care', 'trauma specialist'];
+          case 'Respiratory Emergency':
+            return ['pulmonologist', 'critical care specialist', 'critical care / emergency medicine', 'pulmonology'];
+          case 'Pediatric Emergency':
+            return ['pediatrician', 'pediatric specialist', 'pediatrics'];
+          case 'Pregnancy / Obstetric Emergency':
+            return ['obstetrician', 'gynecologist', 'obstetrician / gynecologist', 'gynaecology', 'obstetrics'];
+          case 'Critical Bleeding':
+            return ['emergency medicine', 'trauma surgeon', 'vascular / trauma surgeon', 'critical care / emergency medicine', 'general surgery & trauma'];
+          default:
+            return ['emergency medicine', 'critical care / emergency medicine', 'general medicine'];
+        }
+      };
+
+      if (backendRecs && backendRecs.length > 0) {
+        const mapped = backendRecs.map((rec) => {
+          const normHospId = normalizeHospitalId(rec.hospitalId);
+          const hospital = hospitals.find((h) => normalizeHospitalId(h.id) === normHospId) || hospitals[0];
+          
+          const requiredSpecialties = getRequiredDoctorSpecialties(emergencyType);
+          const hospitalDoctors = doctors.filter((d) => normalizeHospitalId(d.hospitalId) === normHospId);
+          const doctor = hospitalDoctors.find((d) => {
+            const ds = (d.specialization || d.specialty || '').toLowerCase();
+            return requiredSpecialties.some((spec) => ds.includes(spec) || spec.includes(ds));
+          }) || hospitalDoctors.find((d) => d.status === 'Available' || d.emergencyDuty) || hospitalDoctors[0] || doctors[0];
+
+          const hasICU = resources.some((r) => normalizeHospitalId(r.hospitalId) === normHospId && r.resourceType === 'icu_beds' && r.available > 0);
+          const hasVentilator = resources.some((r) => normalizeHospitalId(r.hospitalId) === normHospId && r.resourceType === 'ventilators' && r.available > 0);
 
           return {
-            hospital: h,
-            matchScore,
-            travelTimeMin,
-            distanceKm: h.distanceFromUserKm,
-            doctor: matchedDoctor,
+            hospital,
+            matchScore: rec.matchScore,
+            travelTimeMin: rec.estimatedTravelTimeMin,
+            distanceKm: rec.distanceKm,
+            doctor,
             hasICU,
             hasVentilator,
-            reason: `Recommended Resource Match: ${h.name} currently reports available Emergency Department capacity, on-duty specialist (${matchedDoctor.name}), ${hasICU ? 'ICU availability' : 'emergency beds'}, and is located ${h.distanceFromUserKm} km (${travelTimeMin} min) from incident coordinates.`
+            reason: rec.reason,
+            reasonTags: rec.reasonTags || [],
           };
-        })
-        .sort((a, b) => b.matchScore - a.matchScore);
+        });
 
-      setAiRecommendations(mapped);
+        setAiRecommendations(mapped);
+      } else {
+        const mapped = hospitals
+          .filter((h) => h.verified && h.emergencyStatus !== 'Critical')
+          .map((h, idx) => {
+            let matchScore = 96 - idx * 5;
+            const normHospId = normalizeHospitalId(h.id);
+            const matchedDoctor = doctors.find((d) => normalizeHospitalId(d.hospitalId) === normHospId && (d.availabilityStatus === 'Available' || d.status === 'Available')) || doctors[0];
+            const hasICU = resources.some((r) => normalizeHospitalId(r.hospitalId) === normHospId && r.resourceType === 'icu_beds' && r.available > 0);
+            const hasVentilator = resources.some((r) => normalizeHospitalId(r.hospitalId) === normHospId && r.resourceType === 'ventilators' && r.available > 0);
+
+            if (!hasICU) matchScore -= 10;
+            matchScore = Math.max(70, Math.min(99, matchScore));
+
+            const travelTimeMin = Math.max(4, Math.round(h.distanceFromUserKm * 2.8));
+
+            return {
+              hospital: h,
+              matchScore,
+              travelTimeMin,
+              distanceKm: h.distanceFromUserKm,
+              doctor: matchedDoctor,
+              hasICU,
+              hasVentilator,
+              reason: `Recommended Resource Match: ${h.name} currently reports available Emergency Department capacity, on-duty specialist (${matchedDoctor.name}), ${hasICU ? 'ICU availability' : 'emergency beds'}, and is located ${h.distanceFromUserKm} km (${travelTimeMin} min) from incident coordinates.`,
+              reasonTags: [`${h.distanceFromUserKm} km away`, 'Emergency Dept Free'],
+            };
+          })
+          .sort((a, b) => b.matchScore - a.matchScore);
+
+        setAiRecommendations(mapped);
+      }
+
       setIsAiMatching(false);
       fetchEmergencyLogs();
     }, 1800);

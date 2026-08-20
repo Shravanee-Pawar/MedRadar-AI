@@ -131,7 +131,7 @@ export const emergencyService = {
   triggerSOS: async (
     emergencyType: string,
     location: string,
-    requiredResources: string[],
+    requiredResources: string[] | undefined,
     patientId: string,
     patientName: string,
     locationType: 'current_gps' | 'manual' = 'manual',
@@ -148,7 +148,6 @@ export const emergencyService = {
         lat: lat || 16.9902,
         lng: lng || 73.3120,
         locationType,
-        requiredResources,
       }),
     });
 
@@ -175,7 +174,7 @@ export const emergencyService = {
       lat: lat || (16.9944 + (Math.random() - 0.5) * 0.05),
       lng: lng || (73.3033 + (Math.random() - 0.5) * 0.05),
       locationType,
-      requiredResources,
+      requiredResources: requiredResources || mapping.required.map(r => r.id),
       potentialResources: potentialList,
       status: 'Active',
       stepIndex: 3,

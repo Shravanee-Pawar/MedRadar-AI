@@ -159,7 +159,11 @@ async function runTestSuite() {
       body: JSON.stringify({ emergencyType: 'Road Accident / Poly-Trauma', lat: 16.9902, lng: 73.3120, location: 'Jail Road Ratnagiri', requiredResources: ['ICU Bed', 'Ventilator'] }),
     }).then((r) => r.json());
     emergencyId = res.data?.emergencyRequest?.id;
-    return res.success === true && res.data.recommendations.length > 0;
+
+      console.log('\n🔍 RECOMMENDATION ENGINE RESPONSE:');
+      console.dir(res.data?.recommendations, { depth: null });
+
+      return res.success === true && res.data.recommendations.length > 0;
   });
 
   await assertTest('POST /api/v1/emergency/requests/:id/pre-alert', async () => {

@@ -5,7 +5,7 @@ import { EmergencyRequestStatus, EmergencyCoordinationStatus } from '../interfac
 export class EmergencyController {
   public static triggerSos = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { emergencyType, location, locationAddress, lat, lng, locationType, requiredResources } = req.body;
+      const { emergencyType, location, locationAddress, lat, lng, locationType } = req.body;
 
       if (!emergencyType || lat === undefined || lng === undefined) {
         res.status(400).json({
@@ -28,7 +28,6 @@ export class EmergencyController {
         lat: Number(lat),
         lng: Number(lng),
         locationType,
-        requiredResources,
       });
 
       res.status(201).json({

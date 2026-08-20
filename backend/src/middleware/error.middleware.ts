@@ -15,7 +15,11 @@ export const errorHandler = (
   const message = err.message || 'Internal Server Error';
   const code = err.code || 'INTERNAL_SERVER_ERROR';
 
-  console.error(`[Error] ${code}: ${message}`, err);
+  if (statusCode >= 500) {
+    console.error(`[Error] ${code}: ${message}`, err);
+  } else {
+    console.warn(`[Validation Warning] ${code}: ${message}`);
+  }
 
   res.status(statusCode).json({
     success: false,

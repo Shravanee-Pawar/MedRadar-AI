@@ -166,6 +166,7 @@ export interface Recommendation {
   estimatedTravelTimeMin: number;
   reason: string; // Explainable AI matching explanation
   updatedAt: string;
+  reasonTags?: string[];
 }
 
 export interface BloodRequest {

@@ -1,6 +1,6 @@
 import { emergencyRepository } from '../repositories/emergency.repository.js';
 import { hospitalRepository } from '../repositories/hospital.repository.js';
-import { RecommendationService, Recommendation } from './recommendation.service.js';
+import { RecommendationService, Recommendation, getRequiredResourcesForEmergency } from './recommendation.service.js';
 import {
   EmergencyRequest,
   EmergencyRequestStatus,
@@ -42,7 +42,7 @@ export class EmergencyService {
       lat: data.lat,
       lng: data.lng,
       locationType: data.locationType || 'current_gps',
-      requiredResources: data.requiredResources || ['ICU Bed', 'Ventilator'],
+      requiredResources: getRequiredResourcesForEmergency(data.emergencyType),
       status: 'Active',
       coordinationStatus: 'New',
     });
@@ -55,7 +55,6 @@ export class EmergencyService {
         emergencyType: data.emergencyType,
         lat: data.lat,
         lng: data.lng,
-        requiredResources: data.requiredResources || [],
       },
       hospitals
     );
