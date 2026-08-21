@@ -130,7 +130,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
                 }}
                 transition={{
                   repeat: Infinity,
-                  duration: node.id === 'ai' ? 4 : 5 + Math.random() * 2,
+                  duration: node.id === 'ai' ? 4 : 5.5,
                   ease: 'easeInOut',
                 }}
               >

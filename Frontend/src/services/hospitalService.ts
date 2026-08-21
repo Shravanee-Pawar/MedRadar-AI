@@ -4,11 +4,16 @@ import { type Hospital, type HospitalResource } from '../types';
 
 export const hospitalService = {
   getHospitals: async (): Promise<Hospital[]> => {
+    const local = db.getHospitals();
     const remote = await apiFetch<Hospital[]>('/hospitals');
     if (remote && Array.isArray(remote) && remote.length > 0) {
-      return remote;
+      const mergedMap = new Map<string, Hospital>();
+      // Put remote first, then local (local overrides/adds newly created ones)
+      remote.forEach(h => mergedMap.set(h.id, h));
+      local.forEach(h => mergedMap.set(h.id, h));
+      return Array.from(mergedMap.values());
     }
-    return db.getHospitals();
+    return local;
   },
 
   getHospitalById: async (id: string): Promise<Hospital | undefined> => {
@@ -25,9 +30,9 @@ export const hospitalService = {
     const newHosp: Hospital = {
       ...hospData,
       id: newId,
-      verified: false,
+      verified: true,
       distanceFromUserKm: Number((Math.random() * 8 + 1).toFixed(1)),
-      readinessScore: 60,
+      readinessScore: 75,
       updatedAt: new Date().toISOString()
     };
 

@@ -271,7 +271,83 @@ export const Header: React.FC<HeaderProps> = ({
     return results;
   };
 
-  const searchResults = isSuperAdmin ? getSuperAdminSearchResults() : isHospitalAdmin ? getHospitalSearchResults() : [];
+  // 3. Patient / User Search Results
+  const getUserSearchResults = () => {
+    if (!searchValue.trim()) return [];
+    const q = searchValue.toLowerCase().trim();
+    const results: Array<{
+      category: string;
+      icon: any;
+      id: string;
+      title: string;
+      subtitle: string;
+      link: string;
+    }> = [];
+
+    // Hospitals
+    db.getHospitals()
+      .filter(h => h.name.toLowerCase().includes(q) || h.city.toLowerCase().includes(q) || h.address.toLowerCase().includes(q) || h.type.toLowerCase().includes(q))
+      .slice(0, 3)
+      .forEach(h => {
+        results.push({
+          category: 'Hospitals',
+          icon: Building2,
+          id: h.id,
+          title: h.name,
+          subtitle: `${h.address}, ${h.city} • Readiness: ${h.readinessScore}% (${h.emergencyStatus})`,
+          link: '/user/hospitals'
+        });
+      });
+
+    // Specialists
+    db.getDoctors()
+      .filter(d => d.name.toLowerCase().includes(q) || d.specialty.toLowerCase().includes(q) || (d.qualification && d.qualification.toLowerCase().includes(q)) || d.hospitalName.toLowerCase().includes(q))
+      .slice(0, 3)
+      .forEach(d => {
+        results.push({
+          category: 'Specialists',
+          icon: Users,
+          id: d.id,
+          title: d.name,
+          subtitle: `${d.specialty} • ${d.hospitalName} (${d.availabilityStatus || d.status})`,
+          link: '/user/specialists'
+        });
+      });
+
+    // Blood Bank Inventory
+    db.getBloodInventory()
+      .filter(b => b.bloodGroup.toLowerCase().includes(q) || b.hospitalName.toLowerCase().includes(q) || b.status.toLowerCase().includes(q))
+      .slice(0, 3)
+      .forEach(b => {
+        results.push({
+          category: 'Blood Inventory',
+          icon: Droplet,
+          id: b.id,
+          title: `Blood Group ${b.bloodGroup} — ${b.hospitalName}`,
+          subtitle: `${b.unitsAvailable} units available (${b.status})`,
+          link: '/user/blood'
+        });
+      });
+
+    // Emergency Services
+    db.getEmergencyRequests()
+      .filter(e => e.id.toLowerCase().includes(q) || e.emergencyType.toLowerCase().includes(q) || e.location.toLowerCase().includes(q))
+      .slice(0, 2)
+      .forEach(e => {
+        results.push({
+          category: 'Emergency SOS',
+          icon: Flame,
+          id: e.id,
+          title: `${e.id} — ${e.emergencyType}`,
+          subtitle: `Location: ${e.location} • Status: ${e.status}`,
+          link: '/user/emergency'
+        });
+      });
+
+    return results;
+  };
+
+  const searchResults = isSuperAdmin ? getSuperAdminSearchResults() : isHospitalAdmin ? getHospitalSearchResults() : getUserSearchResults();
 
   return (
     <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-4 px-6 md:px-8 border-b border-white/5 bg-primary-bg/50 backdrop-blur-md sticky top-0 z-20">
@@ -300,8 +376,8 @@ export const Header: React.FC<HeaderProps> = ({
               className="w-full pl-9 pr-4 py-2 text-xs rounded-full glass-input text-primary-text focus:outline-none focus:border-medical-teal/50"
             />
 
-            {/* Interactive Operational Search Popover for Hospital Admin & Super Admin */}
-            {(isHospitalAdmin || isSuperAdmin) && isSearchOpen && (
+            {/* Interactive Operational Search Popover for All Portals */}
+            {isSearchOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setIsSearchOpen(false)} />
                 
@@ -315,10 +391,10 @@ export const Header: React.FC<HeaderProps> = ({
                     <div className="space-y-3">
                       <div className="flex justify-between items-center border-b border-white/5 pb-2">
                         <span className="text-[10px] font-black uppercase text-muted-text tracking-wider">
-                          {isSuperAdmin ? "SUPER ADMIN QUICK SEARCH" : "INTERNAL OPERATIONS QUICK SEARCH"}
+                          {isSuperAdmin ? "SUPER ADMIN QUICK SEARCH" : isHospitalAdmin ? "INTERNAL OPERATIONS QUICK SEARCH" : "PATIENT QUICK SEARCH"}
                         </span>
                         <span className="text-[9px] text-medical-teal font-bold">
-                          {isSuperAdmin ? "Control Center" : "Hospital Admin Portal"}
+                          {isSuperAdmin ? "Control Center" : isHospitalAdmin ? "Hospital Admin Portal" : "Patient Portal"}
                         </span>
                       </div>
 
@@ -330,7 +406,7 @@ export const Header: React.FC<HeaderProps> = ({
                           { label: '🚨 Emergency Requests', path: '/admin/emergency' },
                           { label: '🩸 Blood Demands', path: '/admin/blood' },
                           { label: '📑 Audit Compliance', path: '/admin/audit-logs' }
-                        ] : [
+                        ] : isHospitalAdmin ? [
                           { label: '👨‍⚕️ Doctors', path: '/hospital/doctors' },
                           { label: '📦 Resources', path: '/hospital/resources' },
                           { label: '🚨 Emergency Requests', path: '/hospital/emergency/sos' },
@@ -339,6 +415,13 @@ export const Header: React.FC<HeaderProps> = ({
                           { label: '🏥 Departments', path: '/hospital/departments' },
                           { label: '🔔 Notifications', path: '/hospital/notifications' },
                           { label: '🔄 Transfers', path: '/hospital/transfers' }
+                        ] : [
+                          { label: '🚨 Emergency SOS', path: '/user/emergency' },
+                          { label: '🏥 Hospital Directory', path: '/user/hospitals' },
+                          { label: '👨‍⚕️ Specialists', path: '/user/specialists' },
+                          { label: '🩸 Blood Banks', path: '/user/blood' },
+                          { label: '📍 Resource Map', path: '/user/map' },
+                          { label: '⭐ Saved Hospitals', path: '/user/saved-resources' }
                         ]).map(item => (
                           <button
                             key={item.label}
@@ -367,7 +450,9 @@ export const Header: React.FC<HeaderProps> = ({
                         <div className="py-6 text-center text-xs text-muted-text">
                           {isSuperAdmin
                             ? "No matching hospitals, resources, users, or requests found."
-                            : "No matching internal hospital resources, doctors, or requests found."}
+                            : isHospitalAdmin
+                            ? "No matching internal hospital resources, doctors, or requests found."
+                            : "No matching hospitals, specialists, or blood resources found."}
                         </div>
                       ) : (
                         <div className="space-y-1.5">

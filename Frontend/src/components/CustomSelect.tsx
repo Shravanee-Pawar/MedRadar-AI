@@ -37,7 +37,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
   const selectedOption = options.find(opt => opt.value === value);
 
   return (
-    <div ref={dropdownRef} className={`relative w-full ${className}`}>
+    <div ref={dropdownRef} className={`relative w-full ${isOpen ? 'z-50' : 'z-10'} ${className}`}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
@@ -52,7 +52,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
       </button>
 
       {isOpen && (
-        <div className="absolute z-50 w-full mt-1.5 rounded-xl bg-[#111A2E] border border-white/10 shadow-2xl max-h-60 overflow-y-auto">
+        <div className="absolute z-[9999] w-full mt-1.5 rounded-xl bg-[#111A2E] border border-white/10 shadow-2xl max-h-60 overflow-y-auto">
           <div className="py-1">
             {options.map((opt) => {
               const isSelected = opt.value === value;

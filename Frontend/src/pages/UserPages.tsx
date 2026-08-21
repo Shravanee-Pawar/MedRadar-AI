@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { db } from '../services/db';
@@ -287,16 +287,16 @@ export const UserEmergencyPage: React.FC = () => {
   // Logs & History State
   const [requests, setRequests] = useState<EmergencyRequest[]>([]);
 
-  const fetchEmergencyLogs = async () => {
+  const fetchEmergencyLogs = useCallback(async () => {
     const list = await emergencyService.getEmergencyRequests();
     setRequests(list);
-  };
+  }, []);
 
   useEffect(() => {
     fetchEmergencyLogs();
     const interval = setInterval(fetchEmergencyLogs, 2500);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchEmergencyLogs]);
 
   // Update resource requirements automatically when emergency category changes
   useEffect(() => {
@@ -1357,14 +1357,14 @@ export const UserHospitalsPage: React.FC = () => {
     localStorage.setItem('medradar_saved_hospitals', JSON.stringify(updated));
   };
 
-  const fetchHospitals = async () => {
+  const fetchHospitals = useCallback(async () => {
     const data = await hospitalService.getHospitals();
     setList(data);
-  };
+  }, []);
 
   useEffect(() => {
     fetchHospitals();
-  }, []);
+  }, [fetchHospitals]);
 
   const getResourceSummary = (hId: string) => {
     const hospRes = resources.filter(r => r.hospitalId === hId);
@@ -1398,11 +1398,11 @@ export const UserHospitalsPage: React.FC = () => {
   };
 
   const filteredHospitals = list.filter(h => {
-    const isVerified = h.verified;
     const isNearby = activeTab === 'nearby' ? h.distanceFromUserKm <= 10 : true;
     const isSaved = activeTab === 'saved' ? savedHospIds.includes(h.id) : true;
-    const matchesSearch = h.name.toLowerCase().includes(query.toLowerCase()) || h.city.toLowerCase().includes(query.toLowerCase());
-    return isVerified && isNearby && isSaved && matchesSearch;
+    const q = query.toLowerCase().trim();
+    const matchesSearch = !q || h.name.toLowerCase().includes(q) || h.city.toLowerCase().includes(q) || h.address.toLowerCase().includes(q) || h.type.toLowerCase().includes(q);
+    return isNearby && isSaved && matchesSearch;
   });
 
   return (
@@ -1924,7 +1924,7 @@ export const UserBloodPage: React.FC = () => {
   const [reqUrgency, setReqUrgency] = useState<'Emergency' | 'Urgent' | 'Routine'>('Emergency');
   const [reqQuantity, setReqQuantity] = useState(2);
 
-  const handleQueryBlood = () => {
+  const handleQueryBlood = useCallback(() => {
     // 1. Fetch centralized blood inventory
     const allInventory = db.getBloodInventory();
     
@@ -1974,13 +1974,13 @@ export const UserBloodPage: React.FC = () => {
 
     setResults(mappedResults);
     setSearched(true);
-  };
+  }, [bloodGroup, hospitals, location, quantity]);
 
   useEffect(() => {
     if (searched) {
       handleQueryBlood();
     }
-  }, [bloodGroup, bloodInventory]);
+  }, [searched, handleQueryBlood]);
 
   const handleOpenRequest = (item: any, overrideQty?: number) => {
     setRequestModal({
@@ -2782,14 +2782,14 @@ export const UserSpecialistsPage: React.FC = () => {
   const [bookingPatientPhone, setBookingPatientPhone] = useState(currentUser?.mobile || '');
   const [bookingSuccessToken, setBookingSuccessToken] = useState<string | null>(null);
 
-  const fetchDoctors = async () => {
+  const fetchDoctors = useCallback(async () => {
     const data = await doctorService.getDoctors();
     setList(data);
-  };
+  }, []);
 
   useEffect(() => {
     fetchDoctors();
-  }, []);
+  }, [fetchDoctors]);
 
   // Guarantee dataset uniqueness before rendering
   const uniqueList: Doctor[] = [];
@@ -3424,14 +3424,11 @@ export const UserNotificationsPage: React.FC = () => {
 // ============================================================
 export const UserSavedResourcesPage: React.FC = () => {
   const navigate = useNavigate();
-  const [savedIds, setSavedIds] = useState<string[]>([]);
-  const [allHospitals, setAllHospitals] = useState<Hospital[]>([]);
-
-  useEffect(() => {
+  const [savedIds, setSavedIds] = useState<string[]>(() => {
     const val = localStorage.getItem('medradar_saved_hospitals');
-    if (val) setSavedIds(JSON.parse(val));
-    setAllHospitals(db.getHospitals());
-  }, []);
+    return val ? JSON.parse(val) : [];
+  });
+  const [allHospitals] = useState<Hospital[]>(() => db.getHospitals());
 
   const handleRemove = (id: string) => {
     const updated = savedIds.filter(i => i !== id);

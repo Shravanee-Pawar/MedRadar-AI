@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { db } from '../services/db';
@@ -886,14 +886,14 @@ export const HospitalDoctorsPage: React.FC = () => {
   const [exp, setExp] = useState(10);
   const [qualification, setQualification] = useState('MBBS, MD');
 
-  const fetchDocs = async () => {
+  const fetchDocs = useCallback(async () => {
     const list = await doctorService.getDoctorsByHospital(hospitalId);
     setDoctorsList(list);
-  };
+  }, [hospitalId]);
 
   useEffect(() => {
     fetchDocs();
-  }, []);
+  }, [fetchDocs]);
 
   const handleAddDoctorSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1056,14 +1056,14 @@ export const HospitalAmbulancesPage: React.FC = () => {
   const [ambNo, setAmbNo] = useState('');
   const [ambType, setAmbType] = useState<'Basic Life Support' | 'Advanced Life Support' | 'Patient Transport' | 'Neonatal Ambulance'>('Advanced Life Support');
 
-  const fetchAmbulances = async () => {
+  const fetchAmbulances = useCallback(async () => {
     const list = db.getAmbulances().filter(a => a.hospitalId === hospitalId);
     setAmbulancesList(list);
-  };
+  }, [hospitalId]);
 
   useEffect(() => {
     fetchAmbulances();
-  }, []);
+  }, [fetchAmbulances]);
 
   const handleAddAmbulance = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1504,7 +1504,7 @@ export const HospitalDepartmentsPage: React.FC = () => {
   useEffect(() => {
     const list = db.getDepartments().filter(d => d.hospitalId === hospitalId);
     setDepts(list);
-  }, []);
+  }, [hospitalId]);
 
   return (
     <Card className="p-8 border border-white/5 text-left">
@@ -1552,7 +1552,7 @@ export const HospitalBloodPage: React.FC = () => {
     return 'Available';
   };
 
-  const loadBloodData = () => {
+  const loadBloodData = useCallback(() => {
     const allBlood = db.getBloodInventory();
     const hospBlood = allBlood.filter(b => b.hospitalId === hospitalId);
 
@@ -1582,11 +1582,11 @@ export const HospitalBloodPage: React.FC = () => {
       r => r.hospitalId === hospitalId || (r.hospitalName && r.hospitalName.toLowerCase().includes(hospitalName.toLowerCase()))
     );
     setActiveRequests(requests);
-  };
+  }, [hospitalId, hospitalName, ALL_GROUPS]);
 
   useEffect(() => {
     loadBloodData();
-  }, [hospitalId]);
+  }, [loadBloodData]);
 
   const handleQuantityChange = (grp: string, delta: number) => {
     setInventoryMap(prev => {
@@ -1637,9 +1637,11 @@ export const HospitalBloodPage: React.FC = () => {
     setTimeout(() => setShowSuccessToast(false), 4000);
   };
 
+  const [currentTimestampMs] = useState(() => Date.now());
+
   const getRelativeTimeString = (isoString: string) => {
     if (!isoString) return 'Just now';
-    const diffMs = Date.now() - new Date(isoString).getTime();
+    const diffMs = Math.max(0, currentTimestampMs - new Date(isoString).getTime());
     const diffMins = Math.floor(diffMs / (1000 * 60));
     if (diffMins < 1) return 'Just now';
     if (diffMins < 60) return `${diffMins} min${diffMins > 1 ? 's' : ''} ago`;
@@ -1650,7 +1652,7 @@ export const HospitalBloodPage: React.FC = () => {
 
   const isDataStale = (isoString: string) => {
     if (!isoString) return false;
-    const diffMs = Date.now() - new Date(isoString).getTime();
+    const diffMs = Math.max(0, currentTimestampMs - new Date(isoString).getTime());
     return diffMs > 2 * 60 * 60 * 1000;
   };
 
@@ -1940,14 +1942,14 @@ export const HospitalSOSCalloutsPage: React.FC = () => {
   const [typeFilter, setTypeFilter] = useState<string>('All');
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
-  const loadEmergencies = () => {
+  const loadEmergencies = useCallback(() => {
     const list = db.getEmergencyRequests();
     setEmergencies(list);
-  };
+  }, []);
 
   useEffect(() => {
     loadEmergencies();
-  }, []);
+  }, [loadEmergencies]);
 
   const triggerToast = (msg: string) => {
     setToastMsg(msg);
@@ -2292,14 +2294,14 @@ export const HospitalEmergencyCoordinationPage: React.FC = () => {
   const [assignedVent, setAssignedVent] = useState<string>('Ventilator #2');
   const [assignedBed, setAssignedBed] = useState<string>('Emergency Bay #2');
 
-  const loadEmergencies = () => {
+  const loadEmergencies = useCallback(() => {
     const list = db.getEmergencyRequests();
     setEmergencies(list);
-  };
+  }, []);
 
   useEffect(() => {
     loadEmergencies();
-  }, []);
+  }, [loadEmergencies]);
 
   const triggerToast = (msg: string) => {
     setToastMsg(msg);
@@ -2741,14 +2743,14 @@ export const HospitalTransfersPage: React.FC = () => {
   const [rejectReason, setRejectReason] = useState<string>('Emergency department overloaded');
   const [infoText, setInfoText] = useState<string>('');
 
-  const loadTransfers = () => {
+  const loadTransfers = useCallback(() => {
     const list = db.getTransfers();
     setTransfers(list);
-  };
+  }, []);
 
   useEffect(() => {
     loadTransfers();
-  }, []);
+  }, [loadTransfers]);
 
   const triggerToast = (msg: string) => {
     setSuccessToast(msg);
