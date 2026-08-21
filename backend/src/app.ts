@@ -17,8 +17,7 @@ import { authenticate } from './middleware/auth.middleware.js';
 import { requireRole } from './middleware/role.middleware.js';
 import { notFoundHandler } from './middleware/notFound.middleware.js';
 import { errorHandler } from './middleware/error.middleware.js';
-
-dotenv.config();
+import appointmentRoutes from "./routes/appointment.routes.js";
 
 const app: Express = express();
 
@@ -42,7 +41,7 @@ app.use('/api/v1/transfers', transferRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/audit-logs', auditRoutes);
-
+app.use('/api/v1/appointments', appointmentRoutes);
 // Direct shortcut route for /api/v1/users and /api/v1/analytics/regional
 app.get('/api/v1/users', authenticate, requireRole('super_admin'), AdminController.getUsers);
 app.get('/api/v1/analytics/regional', authenticate, requireRole('super_admin'), AdminController.getRegionalAnalytics);
